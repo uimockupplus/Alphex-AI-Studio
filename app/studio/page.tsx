@@ -5,7 +5,7 @@ import "./studio.css";
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import JSZip from "jszip";
 import {
   ArrowLeft,
@@ -33,6 +33,9 @@ type ProjectFile = {
   name: string;
   content: string;
 };
+
+const STORAGE_KEY = "alphex-studio-project-v1";
+const MAX_FILE_SIZE = 2_000_000;
 
 const starterFiles: ProjectFile[] = [
   {
@@ -150,6 +153,19 @@ function isIgnoredPath(name: string): boolean {
   );
 }
 
+function isValidSavedProject(value: unknown): value is ProjectFile[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+
+  return value.every(
+    (item) =>
+      item !== null &&
+      typeof item === "object" &&
+      typeof item.name === "string" &&
+      typeof item.content === "string" &&
+      item.name.length > 0,
+  );
+}
+
 export default function StudioPage() {
   const [files, setFiles] = useState<ProjectFile[]>(starterFiles);
   const [activeFile, setActiveFile] = useState("index.html");
@@ -161,6 +177,60 @@ export default function StudioPage() {
   const [newFileName, setNewFileName] = useState("");
   const [showNewFile, setShowNewFile] = useState(false);
   const [notice, setNotice] = useState("");
+  const [storageReady, setStorageReady] = useState(false);
+  const [lastSaved, setLastSaved] = useState(false);
+
+  // Restore the last project before enabling automatic saving.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+
+        if (isValidSavedProject(parsed)) {
+          setFiles(parsed);
+
+          const savedActiveFile = window.localStorage.getItem(
+            `${STORAGE_KEY}:active`,
+          );
+
+          const restoredActiveFile =
+            savedActiveFile &&
+            parsed.some((file) => file.name === savedActiveFile)
+              ? savedActiveFile
+              : parsed.find(
+                  (file) =>
+                    file.name === "index.html" ||
+                    file.name.endsWith("/index.html"),
+                )?.name || parsed[0].name;
+
+          setActiveFile(restoredActiveFile);
+          setNotice("Your previous project has been restored.");
+        }
+      }
+    } catch {
+      setNotice("Saved project data could not be restored. Starting a new project.");
+    } finally {
+      setStorageReady(true);
+    }
+  }, []);
+
+  // Save changes automatically after restoration has completed.
+  useEffect(() => {
+    if (!storageReady) return;
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
+      window.localStorage.setItem(`${STORAGE_KEY}:active`, activeFile);
+      setLastSaved(true);
+    } catch {
+      setLastSaved(false);
+      setNotice(
+        "Browser storage is full or unavailable. Export your project ZIP to keep a backup.",
+      );
+    }
+  }, [files, activeFile, storageReady]);
 
   const currentFile = files.find((file) => file.name === activeFile);
 
@@ -183,7 +253,12 @@ export default function StudioPage() {
   const createFile = () => {
     const name = newFileName.trim().replace(/^\/+/, "");
 
-    if (!name || name.includes("..") || name.endsWith("/")) {
+    if (
+      !name ||
+      name.includes("..") ||
+      name.endsWith("/") ||
+      isIgnoredPath(name)
+    ) {
       setNotice("Enter a valid file path, such as components/header.js.");
       return;
     }
@@ -214,9 +289,7 @@ export default function StudioPage() {
         try {
           const content = await entry.async("string");
 
-          if (new Blob([content]).size > 2_000_000) {
-            continue;
-          }
+          if (new Blob([content]).size > MAX_FILE_SIZE) continue;
 
           imported.push({ name, content });
         } catch {
@@ -254,11 +327,13 @@ export default function StudioPage() {
         (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
         file.name;
 
-      if (isIgnoredPath(relativePath) || file.size > 2_000_000) continue;
+      if (isIgnoredPath(relativePath) || file.size > MAX_FILE_SIZE) continue;
 
       try {
-        const content = await file.text();
-        imported.push({ name: relativePath, content });
+        imported.push({
+          name: relativePath,
+          content: await file.text(),
+        });
       } catch {
         // Skip files that cannot be read as text.
       }
@@ -448,7 +523,6 @@ export default function StudioPage() {
           <aside className="studio-explorer">
             <div className="studio-panel-heading">
               <span>EXPLORER</span>
-
               <div>
                 <button
                   title="New file"
@@ -456,7 +530,6 @@ export default function StudioPage() {
                 >
                   <FilePlus2 size={15} />
                 </button>
-
                 <button
                   title="Hide explorer"
                   onClick={() => setShowExplorer(false)}
@@ -486,9 +559,7 @@ export default function StudioPage() {
                   placeholder="path/to/file.js"
                   aria-label="New file name"
                 />
-
                 <button type="submit">Add</button>
-
                 <button
                   type="button"
                   onClick={() => setShowNewFile(false)}
@@ -518,7 +589,9 @@ export default function StudioPage() {
             </div>
 
             <div className="studio-local-note">
-              Files are handled in this browser.
+              {lastSaved
+                ? "Project saved in this browser."
+                : "Browser storage unavailable. Export a backup."}
             </div>
           </aside>
         )}
@@ -605,7 +678,7 @@ export default function StudioPage() {
                 : getLanguage(currentFile?.name || "").toUpperCase()}
             </span>
             <span>{files.length} files</span>
-            <span>Browser workspace</span>
+            <span>{lastSaved ? "Saved locally" : "Not saved locally"}</span>
           </footer>
         </section>
 
@@ -616,7 +689,6 @@ export default function StudioPage() {
                 <Sparkles size={15} />
                 AI ASSISTANT
               </span>
-
               <button
                 title="Hide assistant"
                 onClick={() => setShowAssistant(false)}
@@ -633,8 +705,8 @@ export default function StudioPage() {
               <h2>Your coding partner.</h2>
 
               <p>
-                Connect an AI provider in Settings to ask questions about your
-                code and request edits.
+                AI chat and provider configuration will be added in a later
+                batch. Your current code remains editable without an AI key.
               </p>
 
               <button
@@ -642,14 +714,14 @@ export default function StudioPage() {
                 onClick={() => setShowSettings(true)}
               >
                 <Settings2 size={15} />
-                Configure AI provider
+                AI settings
               </button>
 
               <div className="studio-ai-disclaimer">
-                <strong>Bring your own key</strong>
+                <strong>Local project storage</strong>
                 <span>
-                  AI integration is not enabled yet. Provider configuration
-                  will be added in a later batch.
+                  Project files are saved in this browser. Export a ZIP for a
+                  portable backup.
                 </span>
               </div>
             </div>
@@ -691,7 +763,6 @@ export default function StudioPage() {
                 </span>
                 <h2 id="settings-title">Settings</h2>
               </div>
-
               <button
                 onClick={() => setShowSettings(false)}
                 aria-label="Close settings"
@@ -702,13 +773,12 @@ export default function StudioPage() {
 
             <div className="studio-settings-message">
               <Sparkles size={18} />
-
               <div>
-                <strong>AI provider configuration is coming next.</strong>
+                <strong>AI configuration is coming next.</strong>
                 <p>
-                  This initial workspace includes editing, project import,
-                  basic HTML preview, and ZIP export. AI chat and API-key
-                  configuration will be implemented in a later batch.
+                  Automatic local saving is enabled where browser storage is
+                  available. AI provider integration will be implemented in a
+                  later batch.
                 </p>
               </div>
             </div>

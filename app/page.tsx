@@ -120,8 +120,8 @@ function WorkspacePreview() {
         </div>
 
         <div className="preview-brand">
-          <span className="preview-brand-mark">A</span>
-          alphex-studio
+          
+          alphex-AI-studio
         </div>
 
         <span className="preview-status">

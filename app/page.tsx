@@ -87,7 +87,7 @@ function Brand() {
         className="brand-logo"
       />
       <span className="brand-attribution">
-        POWERED BY <strong>ALPHEX AI</strong>
+      
       </span>
     </Link>
   );

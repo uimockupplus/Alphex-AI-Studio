@@ -1,6 +1,8 @@
 
 "use client";
 
+import "./studio.css";
+
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useState } from "react";
@@ -210,10 +212,8 @@ export default function StudioPage() {
         if (entry.dir || isIgnoredPath(name)) continue;
 
         try {
-          // Read file content using JSZip's supported public API.
           const content = await entry.async("string");
 
-          // Avoid loading very large text files into the editor.
           if (new Blob([content]).size > 2_000_000) {
             continue;
           }
@@ -232,7 +232,8 @@ export default function StudioPage() {
       setFiles(imported);
 
       const indexFile = imported.find(
-        (item) => item.name === "index.html" || item.name.endsWith("/index.html"),
+        (item) =>
+          item.name === "index.html" || item.name.endsWith("/index.html"),
       );
 
       setActiveFile(indexFile?.name || imported[0].name);
@@ -253,8 +254,7 @@ export default function StudioPage() {
         (file as File & { webkitRelativePath?: string }).webkitRelativePath ||
         file.name;
 
-      if (isIgnoredPath(relativePath)) continue;
-      if (file.size > 2_000_000) continue;
+      if (isIgnoredPath(relativePath) || file.size > 2_000_000) continue;
 
       try {
         const content = await file.text();
@@ -272,7 +272,8 @@ export default function StudioPage() {
     setFiles(imported);
 
     const indexFile = imported.find(
-      (item) => item.name === "index.html" || item.name.endsWith("/index.html"),
+      (item) =>
+        item.name === "index.html" || item.name.endsWith("/index.html"),
     );
 
     setActiveFile(indexFile?.name || imported[0].name);
@@ -298,9 +299,7 @@ export default function StudioPage() {
       anchor.click();
       anchor.remove();
 
-      // Revoke after the browser has had time to begin the download.
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-
       setNotice("Project ZIP exported.");
     } catch {
       setNotice("Could not export the project. Please try again.");
@@ -309,7 +308,8 @@ export default function StudioPage() {
 
   const previewDocument = () => {
     const htmlFile = files.find(
-      (file) => file.name === "index.html" || file.name.endsWith("/index.html"),
+      (file) =>
+        file.name === "index.html" || file.name.endsWith("/index.html"),
     );
 
     if (!htmlFile) {
@@ -323,7 +323,8 @@ export default function StudioPage() {
 
   const previewHtml = (() => {
     const htmlFile = files.find(
-      (file) => file.name === "index.html" || file.name.endsWith("/index.html"),
+      (file) =>
+        file.name === "index.html" || file.name.endsWith("/index.html"),
     );
 
     if (!htmlFile) return "";
@@ -332,25 +333,21 @@ export default function StudioPage() {
 
     const cssFile = files.find(
       (file) =>
-        file.name === "styles.css" ||
-        file.name.endsWith("/styles.css"),
+        file.name === "styles.css" || file.name.endsWith("/styles.css"),
     );
 
     const jsFile = files.find(
       (file) =>
-        file.name === "app.js" ||
-        file.name.endsWith("/app.js"),
+        file.name === "app.js" || file.name.endsWith("/app.js"),
     );
 
-    // This initial preview supports the common single-page project structure.
-    // It does not execute a Node.js or Next.js application build.
     html = html.replace(
       /<link\b[^>]*href=["'][^"']*\.css(?:\?[^"']*)?["'][^>]*>/gi,
       "",
     );
 
     html = html.replace(
-      /<script\b[^>]*src=["'][^"']*\.js(?:\?[^"']*)?["'][^>]*>\s*<\/script>/gi,
+      /<script\b[^>]*src=["'][^"']*\.js(?:\?[^"']*)?["']\s*>\s*<\/script>/gi,
       "",
     );
 

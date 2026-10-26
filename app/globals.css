@@ -1932,3 +1932,32 @@ a:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Mobile navigation: keep the logo and Launch Studio button visible */
+@media (max-width: 480px) {
+  .brand-logo {
+    width: 210px !important;
+    height: 64px !important;
+    max-width: 55vw;
+  }
+
+  nav {
+    min-width: 0;
+  }
+
+  nav .container,
+  nav .nav-container,
+  nav .navbar-container {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding-left: 12px;
+    padding-right: 12px;
+    box-sizing: border-box;
+  }
+
+  nav a,
+  nav button {
+    flex-shrink: 0;
+  }
+}

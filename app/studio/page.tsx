@@ -1,4 +1,3 @@
-
 "use client";
 
 import "./studio.css";
@@ -23,6 +22,8 @@ import {
   Send,
   LoaderCircle,
   Trash2,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 const Editor = dynamic(() => import("@monaco-editor/react"), {
@@ -31,6 +32,8 @@ const Editor = dynamic(() => import("@monaco-editor/react"), {
     <div className="studio-editor-loading">Loading code editor…</div>
   ),
 });
+
+type StudioTheme = "light" | "dark";
 
 type ProjectFile = {
   name: string;
@@ -51,6 +54,7 @@ type AISettings = {
 const STORAGE_KEY = "alphex-studio-project-v1";
 const AI_SETTINGS_KEY = "alphex-studio-ai-settings-v1";
 const CHAT_KEY = "alphex-studio-chat-v1";
+const THEME_KEY = "alphex-studio-theme-v1";
 const MAX_FILE_SIZE = 2_000_000;
 
 const DEFAULT_AI_SETTINGS: AISettings = {
@@ -198,13 +202,15 @@ function readStoredMessages(): ChatMessage[] {
     const value: unknown = JSON.parse(raw);
     if (!Array.isArray(value)) return [];
 
-    return value.filter(
-      (item): item is ChatMessage =>
-        item !== null &&
-        typeof item === "object" &&
-        (item.role === "user" || item.role === "assistant") &&
-        typeof item.content === "string",
-    ).slice(-30);
+    return value
+      .filter(
+        (item): item is ChatMessage =>
+          item !== null &&
+          typeof item === "object" &&
+          (item.role === "user" || item.role === "assistant") &&
+          typeof item.content === "string",
+      )
+      .slice(-30);
   } catch {
     return [];
   }
@@ -223,6 +229,7 @@ export default function StudioPage() {
   const [notice, setNotice] = useState("");
   const [storageReady, setStorageReady] = useState(false);
   const [lastSaved, setLastSaved] = useState(false);
+  const [theme, setTheme] = useState<StudioTheme>("light");
 
   const [aiSettings, setAiSettings] =
     useState<AISettings>(DEFAULT_AI_SETTINGS);
@@ -278,14 +285,17 @@ export default function StudioPage() {
                 ? candidate.model
                 : DEFAULT_AI_SETTINGS.model,
             apiKey:
-              typeof candidate.apiKey === "string"
-                ? candidate.apiKey
-                : "",
+              typeof candidate.apiKey === "string" ? candidate.apiKey : "",
           });
         }
       }
 
       setMessages(readStoredMessages());
+
+      const storedTheme = window.localStorage.getItem(THEME_KEY);
+      if (storedTheme === "light" || storedTheme === "dark") {
+        setTheme(storedTheme);
+      }
     } catch {
       setNotice("Some saved settings could not be restored.");
     } finally {
@@ -328,10 +338,12 @@ export default function StudioPage() {
     }
   }, [messages, storageReady]);
 
-  const currentFile = files.find((file) => file.name === activeFile);
+  useEffect(() => {
+    if (!storageReady) return;
+    window.localStorage.setItem(THEME_KEY, theme);
+  }, [theme, storageReady]);
 
-  const getContent = (name: string): string =>
-    files.find((file) => file.name === name)?.content || "";
+  const currentFile = files.find((file) => file.name === activeFile);
 
   const updateCurrentFile = useCallback(
     (content: string | undefined) => {
@@ -552,7 +564,10 @@ export default function StudioPage() {
     try {
       const parsedURL = new URL(endpoint);
 
-      if (parsedURL.protocol !== "https:" && parsedURL.hostname !== "localhost") {
+      if (
+        parsedURL.protocol !== "https:" &&
+        parsedURL.hostname !== "localhost"
+      ) {
         setAiError("Use a valid HTTPS API endpoint.");
         return;
       }
@@ -679,19 +694,42 @@ export default function StudioPage() {
   };
 
   return (
-    <main className="studio-shell">
+    <main className="studio-shell" data-theme={theme}>
       <header className="studio-topbar">
         <div className="studio-topbar-left">
           <Link href="/" className="studio-back" aria-label="Back to homepage">
             <ArrowLeft size={16} />
           </Link>
 
-          <span className="studio-brand-mark">A</span>
-          <span className="studio-brand-name">alphex-studio</span>
-          <span className="studio-powered">POWERED BY ALPHEX AI</span>
+          <img
+            className="studio-brand-logo"
+            src={
+              theme === "dark"
+                ? "/alphex-logo-dark.png"
+                : "/alphex-logo-light.png"
+            }
+            alt="Alphex AI"
+          />
         </div>
 
         <div className="studio-topbar-actions">
+          <button
+            className="studio-theme-toggle"
+            type="button"
+            onClick={() =>
+              setTheme((current) => (current === "light" ? "dark" : "light"))
+            }
+            aria-label={
+              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+            }
+            title={
+              theme === "light" ? "Switch to dark mode" : "Switch to light mode"
+            }
+          >
+            {theme === "light" ? <Moon size={15} /> : <Sun size={15} />}
+            <span>{theme === "light" ? "Dark mode" : "Light mode"}</span>
+          </button>
+
           <label className="studio-tool-button">
             <Upload size={15} />
             Import ZIP
@@ -871,7 +909,7 @@ export default function StudioPage() {
             ) : currentFile ? (
               <Editor
                 height="100%"
-                theme="vs-dark"
+                theme={theme === "dark" ? "vs-dark" : "light"}
                 language={getLanguage(currentFile.name)}
                 path={currentFile.name}
                 value={currentFile.content}
